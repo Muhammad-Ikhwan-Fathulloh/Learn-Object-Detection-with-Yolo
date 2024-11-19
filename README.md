@@ -10,3 +10,7 @@
 
 ## Access Client
 - Url = https://www.hivemq.com/demos/websocket-client/
+
+## Roboflow
+- API Key = https://docs.roboflow.com/api-reference/authentication
+- Datasets = https://universe.roboflow.com/compvis-final-project/mask-wearing-9wlzj
