@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mask Detection Stream with MQTT</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mqtt/4.3.7/mqtt.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+</head>
+<body>
+    <div class="container mt-5">
+        <h1 class="text-center">Mask Detection Stream with MQTT</h1>
+        <p class="text-center text-muted">Upload an image to detect mask usage and view MQTT updates.</p>
+        
+        <!-- Upload Form -->
+        <div class="card shadow-sm mb-4">
+            <div class="card-body">
+                <form id="uploadForm" class="text-center">
+                    <div class="mb-3">
+                        <input type="file" id="fileInput" class="form-control" accept="image/*" required>
+                    </div>
+                    <button type="submit" class="btn btn-primary">Upload and Detect</button>
+                </form>
+            </div>
+        </div>
+
+        <!-- Results Section -->
+        <div id="results" class="card shadow-sm" style="display: none;">
+            <div class="card-body">
+                <h5>Detection Results</h5>
+                <ul id="detectionList" class="list-group mb-3"></ul>
+                <div class="row">
+                    <div class="col-md-6">
+                        <h6>Mask Detected</h6>
+                        <img id="maskImage" src="" alt="Mask Detection" class="img-fluid">
+                    </div>
+                    <div class="col-md-6">
+                        <h6>No Mask Detected</h6>
+                        <img id="noMaskImage" src="" alt="No Mask Detection" class="img-fluid">
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- MQTT Logs -->
+        <div id="mqttLogs" class="card shadow-sm mt-4">
+            <div class="card-body">
+                <h5>MQTT Logs</h5>
+                <ul id="mqttLogList" class="list-group"></ul>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Initialize MQTT client
+        const mqttClient = mqtt.connect("wss://public:public@public.cloud.shiftr.io", {
+            clientId: "web_client",
+        });
+
+        const mqttTopic = "mask_detection/results";
+        const mqttLogList = document.getElementById("mqttLogList");
+
+        mqttClient.on("connect", () => {
+            console.log("Connected to MQTT broker!");
+            mqttClient.subscribe(mqttTopic, (err) => {
+                if (err) {
+                    console.error("Failed to subscribe to topic:", err);
+                } else {
+                    console.log(`Subscribed to topic: ${mqttTopic}`);
+                }
+            });
+        });
+
+        mqttClient.on("message", (topic, message) => {
+            const logItem = document.createElement("li");
+            logItem.className = "list-group-item";
+            logItem.textContent = `Received [${topic}]: ${message.toString()}`;
+            mqttLogList.appendChild(logItem);
+        });
+
+        mqttClient.on("error", (err) => {
+            console.error("MQTT error:", err);
+        });
+
+        // Handle form submission
+        const uploadForm = document.getElementById("uploadForm");
+        const fileInput = document.getElementById("fileInput");
+        const resultsCard = document.getElementById("results");
+        const detectionList = document.getElementById("detectionList");
+        const maskImage = document.getElementById("maskImage");
+        const noMaskImage = document.getElementById("noMaskImage");
+
+        uploadForm.addEventListener("submit", async (event) => {
+            event.preventDefault();
+            const file = fileInput.files[0];
+            if (!file) {
+                alert("Please select an image file.");
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append("file", file);
+
+            try {
+                // Send POST request to FastAPI
+                const response = await axios.post("http://127.0.0.1:8000/predict", formData, {
+                    headers: {
+                        "Content-Type": "multipart/form-data",
+                    },
+                });
+
+                const data = response.data;
+
+                // Display detection results
+                detectionList.innerHTML = "";
+                data.detections.forEach((detection) => {
+                    const listItem = document.createElement("li");
+                    listItem.className = "list-group-item";
+                    listItem.textContent = `${detection.category}: [${detection.bounding_box.join(", ")}]`;
+                    detectionList.appendChild(listItem);
+                });
+
+                // Update images
+                maskImage.src = `data:image/jpeg;base64,${data.mask_image}`;
+                noMaskImage.src = `data:image/jpeg;base64,${data.no_mask_image}`;
+
+                // Show results section
+                resultsCard.style.display = "block";
+
+                // Publish results to MQTT
+                const payload = JSON.stringify(data);
+                mqttClient.publish(mqttTopic, payload, (err) => {
+                    if (err) {
+                        console.error("Failed to publish message:", err);
+                    } else {
+                        console.log("Message published to MQTT:", payload);
+                    }
+                });
+            } catch (error) {
+                console.error(error);
+                alert("Failed to process the image. Please try again.");
+            }
+        });
+    </script>
+</body>
+</html>

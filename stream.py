@@ -6,6 +6,7 @@ import cv2
 import numpy as np
 import base64
 import os
+import paho.mqtt.client as mqtt
 
 app = FastAPI()
 
@@ -25,6 +26,36 @@ if not os.path.exists(model_path):
 
 model = YOLO(model_path)
 
+# MQTT Configuration
+MQTT_BROKER = "public.cloud.shiftr.io"  # Broker URL
+MQTT_PORT = 1883                        # Port number
+MQTT_USERNAME = "public"                # Username
+MQTT_PASSWORD = "public"                # Password
+MQTT_TOPIC = "mask_detection/results"   # Topic
+
+mqtt_client = mqtt.Client()
+
+# MQTT Connection Handler
+def connect_mqtt():
+    def on_connect(client, userdata, flags, rc):
+        if rc == 0:
+            print("Connected to MQTT broker successfully!")
+        else:
+            print(f"Failed to connect, return code {rc}")
+
+    def on_disconnect(client, userdata, rc):
+        print("Disconnected from MQTT broker")
+
+    # Set callbacks
+    mqtt_client.on_connect = on_connect
+    mqtt_client.on_disconnect = on_disconnect
+
+    # Set username and password for the broker
+    mqtt_client.username_pw_set(MQTT_USERNAME, MQTT_PASSWORD)
+    
+    # Connect to the broker
+    mqtt_client.connect(MQTT_BROKER, MQTT_PORT, keepalive=60)
+    
 # Utility functions
 def read_image_from_upload(file: UploadFile):
     """Reads an uploaded image and converts it to an OpenCV format."""
@@ -66,6 +97,16 @@ def encode_image_to_base64(image):
     _, buffer = cv2.imencode(".jpg", image)
     return base64.b64encode(buffer).decode("utf-8")
 
+# MQTT Publisher
+def publish_results(detections, mask_image, no_mask_image):
+    """Publishes detection results to the MQTT broker."""
+    payload = {
+        "detections": detections,
+        "mask_image": mask_image,
+        "no_mask_image": no_mask_image,
+    }
+    mqtt_client.publish(MQTT_TOPIC, payload=str(payload))
+
 # Request and response models
 class PredictionResponse(BaseModel):
     category: str
@@ -81,14 +122,22 @@ async def predict(file: UploadFile = File(...)):
     try:
         image = read_image_from_upload(file)
         detections, mask_img, no_mask_img = detect_mask(image)
+        
+        # Encode images to Base64
+        mask_image_encoded = encode_image_to_base64(mask_img)
+        no_mask_image_encoded = encode_image_to_base64(no_mask_img)
+        
+        # Publish to MQTT
+        publish_results(detections, mask_image_encoded, no_mask_image_encoded)
+
         return {
             "detections": detections,
-            "mask_image": encode_image_to_base64(mask_img),
-            "no_mask_image": encode_image_to_base64(no_mask_img),
+            "mask_image": mask_image_encoded,
+            "no_mask_image": no_mask_image_encoded,
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/")
 def root():
-    return {"message": "Mask detection API is running!"}
+    return {"message": "Mask detection API with MQTT is running!"}

@@ -28,6 +28,22 @@ Gunakan skrip Python untuk melatih model YOLO. Model yang dilatih akan mendeteks
 ## ✅ **Test the Model**
 Setelah model selesai dilatih, Anda dapat mengujinya pada dataset validasi atau gambar/video lainnya.
 
+- **Jalankan server**:
+
+    Jalankan perintah berikut untuk memulai aplikasi FastAPI pada `http://127.0.0.1:8000`:
+
+    ```bash
+    uvicorn app:app --reload
+    ```
+
+    Atau, jika Anda menggunakan titik masuk (entry point) lain untuk aplikasi FastAPI:
+
+    ```bash
+    uvicorn main:app --reload
+    ```
+
+    Server akan otomatis memuat ulang setiap kali terjadi perubahan pada kode.
+
 - **Source Code**: [Test YOLO Model](https://github.com/Muhammad-Ikhwan-Fathulloh/Learn-Object-Detection-with-Yolo/blob/main/Test_Model_Yolo_Mask.ipynb)
 
 ---
